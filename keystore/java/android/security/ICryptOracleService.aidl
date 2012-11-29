@@ -12,7 +12,7 @@ interface ICryptOracleService {
 	 * @param alias the alias identifying the public key to use for encryption
 	 * @param padding the padding to use for encryption, see {@link Cipher#getInstance(String)}
 	 * @param plainData the data to encrypt
-	 * @returns encrypted data
+	 * @return encrypted data
 	 */
 	byte[] encryptData(String alias, String padding, in byte[] plainData);
 	
@@ -21,7 +21,7 @@ interface ICryptOracleService {
 	 * @param alias the alias identifying the private key to use for decryption
 	 * @param padding the padding to use for decryption, see {@link Cipher#getInstance(String)}
 	 * @param encryptedData the data to decrypt
-	 * @returns decrypted data
+	 * @return decrypted data
 	 */
 	byte[] decryptData(String alias, String padding, in byte[] encryptedData);
 }
