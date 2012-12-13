@@ -12,10 +12,20 @@ import android.os.Looper;
 import android.os.RemoteException;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 
 /**
  * @author Kjell Braden <kjell.braden@stud.tu-darmstadt.de>
@@ -61,7 +71,12 @@ public final class CryptOracle {
         }
     }
 
-    private static final String ACTION_GENERATE = "com.android.keychain.GENERATE";
+    public final static class StringAliasNotFoundException extends Exception {
+        private static final long serialVersionUID = -1722952359173012650L;
+    }
+
+    private static final String ACTION_CHOOSER = "com.android.keychain.CHOOSER";
+    public static final String EXTRA_GENERATE = "android.security.generateAllowed";
 
     private static CryptOracleConnection bind(Context context) throws InterruptedException {
         if (context == null)
@@ -105,14 +120,25 @@ public final class CryptOracle {
      * @return decrypted data
      * @throws InterruptedException
      * @throws KeyChainException
+     * @throws StringAliasNotFoundException
+     * @throws BadPaddingException
+     * @throws IllegalBlockSizeException
+     * @throws NoSuchPaddingException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws InvalidKeySpecException
      */
     public static byte[] decryptData(Context ctx, String alias, String padding,
-            byte[] encryptedData) throws KeyChainException, InterruptedException {
+            byte[] encryptedData) throws KeyChainException, InterruptedException,
+            InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
+            NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException,
+            StringAliasNotFoundException {
         CryptOracleConnection cryptOracleConnection = bind(ctx);
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.decryptData(alias, padding, encryptedData);
         } catch (RemoteException e) {
+            extractRemoteCryptException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
             throw new KeyChainException(e);
@@ -130,15 +156,25 @@ public final class CryptOracle {
      * @return encrypted data
      * @throws KeyChainException
      * @throws InterruptedException
+     * @throws StringAliasNotFoundException
+     * @throws BadPaddingException
+     * @throws IllegalBlockSizeException
+     * @throws NoSuchPaddingException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws InvalidKeySpecException
      */
     public static byte[] encryptData(Context ctx, String alias, String padding, byte[] data)
-            throws KeyChainException, InterruptedException {
+            throws KeyChainException, InterruptedException, InvalidKeySpecException,
+            CertificateException, NoSuchAlgorithmException, NoSuchPaddingException,
+            IllegalBlockSizeException, BadPaddingException, StringAliasNotFoundException {
 
         CryptOracleConnection cryptOracleConnection = bind(ctx);
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.encryptData(alias, padding, data);
         } catch (RemoteException e) {
+            extractRemoteCryptException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
             throw new KeyChainException(e);
@@ -154,11 +190,55 @@ public final class CryptOracle {
                     "calling this from your main thread can lead to deadlock");
     }
 
+    private static void extractRemoteCommonException(Throwable s0)
+            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException {
+        if (s0 instanceof StringAliasNotFoundException) // getPrivKey /
+                                                        // getPubCert
+            throw (StringAliasNotFoundException) s0;
+        if (s0 instanceof InvalidKeySpecException) // in getPrivKey
+            throw (InvalidKeySpecException) s0;
+        if (s0 instanceof CertificateException) // in getPubCert
+            throw (CertificateException) s0;
+    }
+
+    private static void extractRemoteCryptException(RemoteException e)
+            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException,
+            NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException,
+            BadPaddingException {
+        Throwable[] suppressed = e.getSuppressed();
+        if ((suppressed == null) || (suppressed.length == 0))
+            return;
+
+        Throwable s0 = suppressed[0];
+        extractRemoteCommonException(s0);
+        if (s0 instanceof NoSuchPaddingException) // in doCrypt
+            throw (NoSuchPaddingException) s0;
+        if (s0 instanceof IllegalBlockSizeException) // in doCrypt
+            throw (IllegalBlockSizeException) s0;
+        if (s0 instanceof BadPaddingException) // in doCrypt
+            throw (BadPaddingException) s0;
+    }
+
+    private static void extractRemoteSignException(RemoteException e)
+            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException,
+            NoSuchAlgorithmException, InvalidKeyException {
+        Throwable[] suppressed = e.getSuppressed();
+        if ((suppressed == null) || (suppressed.length == 0))
+            return;
+
+        Throwable s0 = suppressed[0];
+        extractRemoteCommonException(s0);
+        if (s0 instanceof NoSuchAlgorithmException) // in sign / verify
+            throw (NoSuchAlgorithmException) s0;
+        if (s0 instanceof InvalidKeyException) // in sign / verify
+            throw (InvalidKeyException) s0;
+    }
+
     /**
-     * Shows a dialog for key generation parameters. If the user confirms, a
-     * private key, public key and an appropriate certificate will be generated
-     * and stored in the KeyStore. Their alias will be supplied in the response
-     * callback. <br/>
+     * Shows a dialog for key selection. The user can select a private key to
+     * grant access to, or have a new private key, public key and an appropriate
+     * certificate generated and stored in the KeyStore. <br/>
+     * Ther selected alias will be supplied in the response callback. <br/>
      * The public key can be retrieved using
      * {@link KeyChain#getCertificateChain(Context, String)}
      * 
@@ -169,16 +249,119 @@ public final class CryptOracle {
      *            be null
      * @see KeyChain#getCertificateChain(Context, String)
      */
-    public static void generate(Activity activity, KeyChainAliasCallback response) {
+    @SuppressWarnings("deprecation")
+    public static void requestKey(Activity activity, KeyChainAliasCallback response) {
         if (activity == null)
             throw new NullPointerException("activity == null");
         if (response == null)
             throw new NullPointerException("response == null");
-        Intent intent = new Intent(ACTION_GENERATE);
+        Intent intent = new Intent(ACTION_CHOOSER);
         intent.putExtra(KeyChain.EXTRA_RESPONSE, new AliasResponse(response));
         // the PendingIntent is used to get calling package name
         intent.putExtra(KeyChain.EXTRA_SENDER,
                 PendingIntent.getActivity(activity, 0, new Intent(), 0));
+        intent.putExtra(EXTRA_GENERATE, true);
         activity.startActivity(intent);
+    }
+
+    /**
+     * Sign the given data with a private key identified by alias.
+     * 
+     * @param ctx
+     * @param alias identifier of the private key to be used for signing
+     * @param data the data to sign
+     * @return the signature
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws StringAliasNotFoundException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws InvalidKeySpecException
+     * @throws InvalidKeyException
+     */
+    public static byte[] sign(Context ctx, String alias, String algorithm, byte[] data)
+            throws InterruptedException,
+            KeyChainException, InvalidKeyException, InvalidKeySpecException, CertificateException,
+            NoSuchAlgorithmException, StringAliasNotFoundException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            return cryptOracleService.sign(alias, algorithm, data);
+        } catch (RemoteException e) {
+            extractRemoteSignException(e);
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * store a certificate in the KeyChain
+     * 
+     * @param ctx
+     * @param alias the alias used for identifiying this public key in further
+     *            operations
+     * @param cert the certificate to be stored
+     * @throws CertificateEncodingException if the certificate could not be
+     *             converted to PEM format
+     * @throws InterruptedException
+     * @throws KeyChainException
+     */
+    public static void storePublicCertificate(Context ctx, String alias, Certificate cert)
+            throws CertificateEncodingException, InterruptedException,
+            KeyChainException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+
+            byte[] pemEncodedCert = Credentials.convertToPem(cert);
+
+            cryptOracleService.storePublicCertificate(alias, pemEncodedCert);
+        } catch (RemoteException e) {
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } catch (IOException e) {
+            throw new CertificateEncodingException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * Verify the signature of data
+     * 
+     * @param ctx
+     * @param alias identifier of the public key to be used for verification
+     * @param data the signed data
+     * @param signature the signature
+     * @return true if the signature was correct
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws StringAliasNotFoundException
+     * @throws NoSuchAlgorithmException
+     * @throws CertificateException
+     * @throws InvalidKeySpecException
+     * @throws InvalidKeyException
+     */
+    public static boolean verify(Context ctx, String alias, String algorithm, byte[] data,
+            byte[] signature)
+            throws InterruptedException, KeyChainException, InvalidKeyException,
+            InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
+            StringAliasNotFoundException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            return cryptOracleService.verify(alias, algorithm, data, signature);
+        } catch (RemoteException e) {
+            extractRemoteSignException(e);
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
     }
 }
