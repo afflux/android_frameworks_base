@@ -27,7 +27,7 @@ interface ICryptOracleService {
 	
 	/**
 	 * signs data using a private key specified by it's alias
-	 * @param alias the alias identifiying the private key to use for signing
+	 * @param alias the alias identifying the private key to use for signing
 	 * @param algorithm the signature algorithm, {@see java.security.Signature}
 	 * @param data the data to sign
 	 * @return the signature
@@ -36,7 +36,7 @@ interface ICryptOracleService {
 	
 	/**
 	 * verify a signature using a public key specified by it's alias
-	 * @param alias the alias identifiying the public key to use for verification
+	 * @param alias the alias identifying the public key to use for verification
 	 * @param algorithm the signature algorithm, {@see java.security.Signature}
 	 * @param data the data that is supposed to be signed by the signature
 	 * @param signature the signature that is supposed to sign the data
@@ -46,8 +46,46 @@ interface ICryptOracleService {
 
 	/**
 	 * stores a certificate in the keystore
-	 * @param alias the alias used for identifiying this public key in further operations
+	 * @param alias the alias used for identifying this public key in further operations
 	 * @param pemEncodedCert the byte data of the PEM encoded certificate
 	 */	
 	void storePublicCertificate(String alias, in byte[] pemEncodedCert);
+	
+	/**
+	 * generates a symmetric key and stores it in the keystore
+	 * @param alias the alias used for identifying the genreated key
+	 * @param alias the algorithm the key will be used for ({@see javax.crypto.KeyFactory#getInstance(String)}) 
+	 * @param keysize
+	 */
+   	void generateSymmetricKey(String alias, String algorithm, int keysize);
+   	
+   	/**
+   	 * retrieves a symmetric key
+   	 * @param alias the alias used for identifying the key
+   	 * @param the algorithm the key will be used for
+   	 * @return the encoded key data
+   	 */
+   	byte[] retrieveSymmetricKey(String alias, String algorithm);
+   	
+   	/**
+   	 * stores a given symmetric key in the keystore
+   	 * @param alias the alias used for identifying the key
+   	 * @param key the encoded key
+   	 */
+   	void importSymmetricKey(String alias, in byte[] key);
+   	
+   	/**
+   	 * removes a symmetric key from the keystore
+   	 * @param alias the alias used for identifying the key
+   	 */
+   	void deleteSymmetricKey(String alias);
+
+	/**
+	 * generate a MAC with a given symmetric key for the input data
+	 * @param alias the alias used for identifying the key
+	 * @param algorithm the MAC algorithm ({@see javax.crypto.Mac#getInstance(String)})
+	 * @param data the data to MAC
+	 * @return the digest
+	 */
+   	byte[] mac(String alias, String algorithm, in byte[] data);
 }

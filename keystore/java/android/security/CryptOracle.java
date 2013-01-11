@@ -26,6 +26,8 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * @author Kjell Braden <kjell.braden@stud.tu-darmstadt.de>
@@ -138,6 +140,7 @@ public final class CryptOracle {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.decryptData(alias, padding, encryptedData);
         } catch (RemoteException e) {
+            extractRemotePrivkeyException(e);
             extractRemoteCryptException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
@@ -174,6 +177,7 @@ public final class CryptOracle {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.encryptData(alias, padding, data);
         } catch (RemoteException e) {
+            extractRemotePubkeyException(e);
             extractRemoteCryptException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
@@ -190,48 +194,64 @@ public final class CryptOracle {
                     "calling this from your main thread can lead to deadlock");
     }
 
-    private static void extractRemoteCommonException(Throwable s0)
-            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException {
-        if (s0 instanceof StringAliasNotFoundException) // getPrivKey /
-                                                        // getPubCert
-            throw (StringAliasNotFoundException) s0;
-        if (s0 instanceof InvalidKeySpecException) // in getPrivKey
-            throw (InvalidKeySpecException) s0;
-        if (s0 instanceof CertificateException) // in getPubCert
-            throw (CertificateException) s0;
+    private static void extractRemoteCryptException(RemoteException e)
+            throws NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException,
+            IllegalArgumentException {
+        Throwable s0 = _extractRemoteException(e);
+
+        if (s0 instanceof NoSuchPaddingException)
+            throw (NoSuchPaddingException) s0;
+        if (s0 instanceof IllegalBlockSizeException)
+            throw (IllegalBlockSizeException) s0;
+        if (s0 instanceof BadPaddingException)
+            throw (BadPaddingException) s0;
+        if (s0 instanceof IllegalArgumentException)
+            throw (IllegalArgumentException) s0;
     }
 
-    private static void extractRemoteCryptException(RemoteException e)
-            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException,
-            NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException,
-            BadPaddingException {
+    private static Throwable _extractRemoteException(RemoteException e) {
         Throwable[] suppressed = e.getSuppressed();
         if ((suppressed == null) || (suppressed.length == 0))
-            return;
+            return null;
 
-        Throwable s0 = suppressed[0];
-        extractRemoteCommonException(s0);
-        if (s0 instanceof NoSuchPaddingException) // in doCrypt
-            throw (NoSuchPaddingException) s0;
-        if (s0 instanceof IllegalBlockSizeException) // in doCrypt
-            throw (IllegalBlockSizeException) s0;
-        if (s0 instanceof BadPaddingException) // in doCrypt
-            throw (BadPaddingException) s0;
+        return suppressed[0];
     }
 
     private static void extractRemoteSignException(RemoteException e)
-            throws StringAliasNotFoundException, InvalidKeySpecException, CertificateException,
-            NoSuchAlgorithmException, InvalidKeyException {
-        Throwable[] suppressed = e.getSuppressed();
-        if ((suppressed == null) || (suppressed.length == 0))
-            return;
+            throws NoSuchAlgorithmException, InvalidKeyException {
+        Throwable s0 = _extractRemoteException(e);
 
-        Throwable s0 = suppressed[0];
-        extractRemoteCommonException(s0);
         if (s0 instanceof NoSuchAlgorithmException) // in sign / verify
             throw (NoSuchAlgorithmException) s0;
         if (s0 instanceof InvalidKeyException) // in sign / verify
             throw (InvalidKeyException) s0;
+    }
+
+    private static void extractRemotePubkeyException(RemoteException e)
+            throws StringAliasNotFoundException, CertificateException {
+        Throwable s0 = _extractRemoteException(e);
+        if (s0 instanceof StringAliasNotFoundException)
+            throw (StringAliasNotFoundException) s0;
+        if (s0 instanceof CertificateException)
+            throw (CertificateException) s0;
+    }
+
+    private static void extractRemoteSecretKeyException(RemoteException e)
+            throws StringAliasNotFoundException, IllegalArgumentException {
+        Throwable s0 = _extractRemoteException(e);
+        if (s0 instanceof StringAliasNotFoundException)
+            throw (StringAliasNotFoundException) s0;
+        if (s0 instanceof IllegalArgumentException)
+            throw (IllegalArgumentException) s0;
+    }
+
+    private static void extractRemotePrivkeyException(RemoteException e)
+            throws StringAliasNotFoundException, InvalidKeySpecException {
+        Throwable s0 = _extractRemoteException(e);
+        if (s0 instanceof StringAliasNotFoundException)
+            throw (StringAliasNotFoundException) s0;
+        if (s0 instanceof InvalidKeySpecException)
+            throw (InvalidKeySpecException) s0;
     }
 
     /**
@@ -280,14 +300,14 @@ public final class CryptOracle {
      * @throws InvalidKeyException
      */
     public static byte[] sign(Context ctx, String alias, String algorithm, byte[] data)
-            throws InterruptedException,
-            KeyChainException, InvalidKeyException, InvalidKeySpecException, CertificateException,
-            NoSuchAlgorithmException, StringAliasNotFoundException {
+            throws InterruptedException, KeyChainException, InvalidKeyException,
+            InvalidKeySpecException, NoSuchAlgorithmException, StringAliasNotFoundException {
         CryptOracleConnection cryptOracleConnection = bind(ctx);
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.sign(alias, algorithm, data);
         } catch (RemoteException e) {
+            extractRemotePrivkeyException(e);
             extractRemoteSignException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
@@ -306,11 +326,12 @@ public final class CryptOracle {
      * @param cert the certificate to be stored
      * @throws CertificateEncodingException if the certificate could not be
      *             converted to PEM format
+     * @throws IllegalArgumentException if the specified alias is already in use
      * @throws InterruptedException
      * @throws KeyChainException
      */
     public static void storePublicCertificate(Context ctx, String alias, Certificate cert)
-            throws CertificateEncodingException, InterruptedException,
+            throws CertificateEncodingException, InterruptedException, IllegalArgumentException,
             KeyChainException {
         CryptOracleConnection cryptOracleConnection = bind(ctx);
         try {
@@ -320,6 +341,10 @@ public final class CryptOracle {
 
             cryptOracleService.storePublicCertificate(alias, pemEncodedCert);
         } catch (RemoteException e) {
+            Throwable s0 = _extractRemoteException(e);
+            if (s0 instanceof IllegalArgumentException)
+                throw (IllegalArgumentException) s0;
+
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
             throw new KeyChainException(e);
@@ -347,15 +372,166 @@ public final class CryptOracle {
      * @throws InvalidKeyException
      */
     public static boolean verify(Context ctx, String alias, String algorithm, byte[] data,
-            byte[] signature)
-            throws InterruptedException, KeyChainException, InvalidKeyException,
-            InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
-            StringAliasNotFoundException {
+            byte[] signature) throws InterruptedException, KeyChainException, InvalidKeyException,
+            CertificateException, NoSuchAlgorithmException, StringAliasNotFoundException {
         CryptOracleConnection cryptOracleConnection = bind(ctx);
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
             return cryptOracleService.verify(alias, algorithm, data, signature);
         } catch (RemoteException e) {
+            extractRemotePubkeyException(e);
+            extractRemoteSignException(e);
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * generate a symmetric key and store it in the system keystore
+     * @param ctx
+     * @param alias identifier of the key for later use 
+     * @param algorithm the key algorithm to be used
+     * @param keysize the key size
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws NoSuchAlgorithmException if the given algorithm is unkown
+     * @throws IllegalArgumentException if the given alias is already in use
+     */
+    public static void generateSymmetricKey(Context ctx, String alias, String algorithm, int keysize)
+            throws InterruptedException, KeyChainException, NoSuchAlgorithmException,
+            IllegalArgumentException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            cryptOracleService.generateSymmetricKey(alias, algorithm, keysize);
+        } catch (RemoteException e) {
+            Throwable s0 = _extractRemoteException(e);
+            if (s0 instanceof IllegalArgumentException)
+                throw (IllegalArgumentException) s0;
+            if (s0 instanceof NoSuchAlgorithmException)
+                throw (NoSuchAlgorithmException) s0;
+
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * retrieve a symmetric key from the keystore
+     * @param ctx
+     * @param alias identifier of the key
+     * @param algorithm key type
+     * @return a SecretKey with the algorithm set to the given key type
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     * @throws IllegalArgumentException if the algorithm is not available
+     */
+    public static SecretKey retrieveSymmetricKey(Context ctx, String alias, String algorithm)
+            throws InterruptedException, KeyChainException, StringAliasNotFoundException,
+            IllegalArgumentException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            byte[] encodedKey = cryptOracleService.retrieveSymmetricKey(alias, algorithm);
+
+            return new SecretKeySpec(encodedKey, algorithm);
+        } catch (RemoteException e) {
+            extractRemoteSecretKeyException(e);
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * import a SecretKey object into the system keystore
+     * @param ctx
+     * @param alias identifier of the key for further usage
+     * @param key the key to import
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws IllegalArgumentException if the given alias is already in use
+     */
+    public static void importSymmetricKey(Context ctx, String alias, SecretKey key)
+            throws InterruptedException, KeyChainException, IllegalArgumentException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            byte[] encodedKey = key.getEncoded();
+            cryptOracleService.importSymmetricKey(alias, encodedKey);
+        } catch (RemoteException e) {
+            Throwable s0 = _extractRemoteException(e);
+            if (s0 instanceof IllegalArgumentException)
+                throw (IllegalArgumentException) s0;
+
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * delete a symmetric key from the system keystore
+     * @param ctx
+     * @param alias identifier of the key
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     */
+    public static void deleteSymmetricKey(Context ctx, String alias)
+            throws InterruptedException, KeyChainException, StringAliasNotFoundException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            cryptOracleService.deleteSymmetricKey(alias);
+        } catch (RemoteException e) {
+            Throwable s0 = _extractRemoteException(e);
+            if (s0 instanceof StringAliasNotFoundException)
+                throw (StringAliasNotFoundException) s0;
+
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * generate a MAC (message authentication code) for a given message
+     * @param ctx
+     * @param alias identifier of the symmetric key to use for authentication 
+     * @param algorithm a mac algorithm type (see {@link javax.crypto.Mac#getInstance(String) Mac.getInstance(String)})
+     * @param data data to authenticate
+     * @see javax.crypto.Mac
+     * @return an authenticated message digest
+     * @throws InterruptedException
+     * @throws KeyChainException
+     * @throws NoSuchAlgorithmException if the algorithm is unknown
+     * @throws InvalidKeyException if the key can't be used for this algorithm
+     * @throws IllegalArgumentException if the key can't be used for this algorithm
+     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     */
+    public static byte[] mac(Context ctx, String alias, String algorithm, byte[] data)
+            throws InterruptedException, KeyChainException, InvalidKeyException,
+            NoSuchAlgorithmException, IllegalArgumentException, StringAliasNotFoundException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            return cryptOracleService.mac(alias, algorithm, data);
+        } catch (RemoteException e) {
+            extractRemoteSecretKeyException(e);
             extractRemoteSignException(e);
             throw new KeyChainException(e);
         } catch (RuntimeException e) {
