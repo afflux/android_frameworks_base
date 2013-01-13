@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -27,6 +28,7 @@ import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
@@ -116,9 +118,11 @@ public final class CryptOracle {
     /**
      * @param ctx
      * @param alias identifier of the key to be used for decryption
+     * @param algorithm 
      * @param padding mode and padding specification, as described in
      *            {@link Cipher}
      * @param encryptedData the data to be decrypted
+     * @param params algorithm iv, or null if the mode of operation does not require an IV
      * @return decrypted data
      * @throws InterruptedException
      * @throws KeyChainException
@@ -130,15 +134,18 @@ public final class CryptOracle {
      * @throws CertificateException
      * @throws InvalidKeySpecException
      */
-    public static byte[] decryptData(Context ctx, String alias, String padding,
-            byte[] encryptedData) throws KeyChainException, InterruptedException,
+    public static byte[] decryptData(Context ctx, String alias, String algorithm, String padding,
+            byte[] encryptedData, IvParameterSpec params) throws KeyChainException, InterruptedException,
             InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
             NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException,
             StringAliasNotFoundException {
         CryptOracleConnection cryptOracleConnection = bind(ctx);
+        byte[] iv = null;
+        if (params != null)
+            iv = params.getIV();
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
-            return cryptOracleService.decryptData(alias, padding, encryptedData);
+            return cryptOracleService.decryptData(alias, algorithm, padding, encryptedData, iv);
         } catch (RemoteException e) {
             extractRemotePrivkeyException(e);
             extractRemoteCryptException(e);
@@ -153,9 +160,11 @@ public final class CryptOracle {
     /**
      * @param ctx
      * @param alias identifier of the key to be used for decryption
+     * @param algorithm 
      * @param padding mode and padding specification, as described in
      *            {@link Cipher}
      * @param data the data to be encrypted
+     * @param params algorithm iv, or null if the mode of operation does not require an IV
      * @return encrypted data
      * @throws KeyChainException
      * @throws InterruptedException
@@ -167,15 +176,18 @@ public final class CryptOracle {
      * @throws CertificateException
      * @throws InvalidKeySpecException
      */
-    public static byte[] encryptData(Context ctx, String alias, String padding, byte[] data)
-            throws KeyChainException, InterruptedException, InvalidKeySpecException,
+    public static byte[] encryptData(Context ctx, String alias, String algorithm, String padding,
+            byte[] data, IvParameterSpec params) throws KeyChainException, InterruptedException, InvalidKeySpecException,
             CertificateException, NoSuchAlgorithmException, NoSuchPaddingException,
             IllegalBlockSizeException, BadPaddingException, StringAliasNotFoundException {
 
         CryptOracleConnection cryptOracleConnection = bind(ctx);
+        byte[] iv = null;
+        if (params != null)
+            iv = params.getIV();
         try {
             ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
-            return cryptOracleService.encryptData(alias, padding, data);
+            return cryptOracleService.encryptData(alias, algorithm, padding, data, iv);
         } catch (RemoteException e) {
             extractRemotePubkeyException(e);
             extractRemoteCryptException(e);
@@ -391,8 +403,9 @@ public final class CryptOracle {
 
     /**
      * generate a symmetric key and store it in the system keystore
+     * 
      * @param ctx
-     * @param alias identifier of the key for later use 
+     * @param alias identifier of the key for later use
      * @param algorithm the key algorithm to be used
      * @param keysize the key size
      * @throws InterruptedException
@@ -424,13 +437,15 @@ public final class CryptOracle {
 
     /**
      * retrieve a symmetric key from the keystore
+     * 
      * @param ctx
      * @param alias identifier of the key
      * @param algorithm key type
      * @return a SecretKey with the algorithm set to the given key type
      * @throws InterruptedException
      * @throws KeyChainException
-     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     * @throws StringAliasNotFoundException if there is no key available with
+     *             the given alias
      * @throws IllegalArgumentException if the algorithm is not available
      */
     public static SecretKey retrieveSymmetricKey(Context ctx, String alias, String algorithm)
@@ -454,6 +469,7 @@ public final class CryptOracle {
 
     /**
      * import a SecretKey object into the system keystore
+     * 
      * @param ctx
      * @param alias identifier of the key for further usage
      * @param key the key to import
@@ -483,11 +499,13 @@ public final class CryptOracle {
 
     /**
      * delete a symmetric key from the system keystore
+     * 
      * @param ctx
      * @param alias identifier of the key
      * @throws InterruptedException
      * @throws KeyChainException
-     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     * @throws StringAliasNotFoundException if there is no key available with
+     *             the given alias
      */
     public static void deleteSymmetricKey(Context ctx, String alias)
             throws InterruptedException, KeyChainException, StringAliasNotFoundException {
@@ -510,9 +528,12 @@ public final class CryptOracle {
 
     /**
      * generate a MAC (message authentication code) for a given message
+     * 
      * @param ctx
-     * @param alias identifier of the symmetric key to use for authentication 
-     * @param algorithm a mac algorithm type (see {@link javax.crypto.Mac#getInstance(String) Mac.getInstance(String)})
+     * @param alias identifier of the symmetric key to use for authentication
+     * @param algorithm a mac algorithm type (see
+     *            {@link javax.crypto.Mac#getInstance(String)
+     *            Mac.getInstance(String)})
      * @param data data to authenticate
      * @see javax.crypto.Mac
      * @return an authenticated message digest
@@ -520,8 +541,10 @@ public final class CryptOracle {
      * @throws KeyChainException
      * @throws NoSuchAlgorithmException if the algorithm is unknown
      * @throws InvalidKeyException if the key can't be used for this algorithm
-     * @throws IllegalArgumentException if the key can't be used for this algorithm
-     * @throws StringAliasNotFoundException if there is no key available with the given alias
+     * @throws IllegalArgumentException if the key can't be used for this
+     *             algorithm
+     * @throws StringAliasNotFoundException if there is no key available with
+     *             the given alias
      */
     public static byte[] mac(Context ctx, String alias, String algorithm, byte[] data)
             throws InterruptedException, KeyChainException, InvalidKeyException,

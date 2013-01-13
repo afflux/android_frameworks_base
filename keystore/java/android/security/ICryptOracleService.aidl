@@ -10,20 +10,24 @@ interface ICryptOracleService {
 	/**
 	 * encrypts data using a public key specified by it's alias
 	 * @param alias the alias identifying the public key to use for encryption
+	 * @param algorithm the algorithm used for encryption (only used for symmetric encryption, for asymmetric keys this is derived from the key itself)
 	 * @param padding the padding to use for encryption, see {@link Cipher#getInstance(String)}
 	 * @param plainData the data to encrypt
+	 * @param iv the algorithm iv, or null if none is needed for this mode of operation
 	 * @return encrypted data
 	 */
-	byte[] encryptData(String alias, String padding, in byte[] plainData);
+	byte[] encryptData(String alias, String algorithm, String padding, in byte[] plainData, in byte[] iv);
 	
 	/**
 	 * decrypts data using a private key specified by it's alias
 	 * @param alias the alias identifying the private key to use for decryption
+	 * @param algorithm the algorithm used for decryption (only used for symmetric encryption, for asymmetric keys this is derived from the key itself) 
 	 * @param padding the padding to use for decryption, see {@link Cipher#getInstance(String)}
 	 * @param encryptedData the data to decrypt
+	 * @param iv the algorithm iv, or null if none is needed for this mode of operation
 	 * @return decrypted data
 	 */
-	byte[] decryptData(String alias, String padding, in byte[] encryptedData);
+	byte[] decryptData(String alias, String algorithm, String padding, in byte[] encryptedData, in byte[] iv);
 	
 	/**
 	 * signs data using a private key specified by it's alias
