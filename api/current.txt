@@ -20279,18 +20279,18 @@ package android.security {
 
   public final class CryptOracle {
     ctor public CryptOracle();
+    method public static android.content.Intent createCheckAccessIntent(android.app.Activity, java.lang.String);
     method public static byte[] decryptData(android.content.Context, java.lang.String, java.lang.String, java.lang.String, byte[], javax.crypto.spec.IvParameterSpec) throws javax.crypto.BadPaddingException, java.security.cert.CertificateException, android.security.CryptOracle.StringAliasNotFoundException, javax.crypto.IllegalBlockSizeException, java.lang.InterruptedException, java.security.spec.InvalidKeySpecException, android.security.KeyChainException, java.security.NoSuchAlgorithmException, javax.crypto.NoSuchPaddingException;
     method public static void deleteSymmetricKey(android.content.Context, java.lang.String) throws android.security.CryptOracle.StringAliasNotFoundException, java.lang.InterruptedException, android.security.KeyChainException;
     method public static byte[] encryptData(android.content.Context, java.lang.String, java.lang.String, java.lang.String, byte[], javax.crypto.spec.IvParameterSpec) throws javax.crypto.BadPaddingException, java.security.cert.CertificateException, android.security.CryptOracle.StringAliasNotFoundException, javax.crypto.IllegalBlockSizeException, java.lang.InterruptedException, java.security.spec.InvalidKeySpecException, android.security.KeyChainException, java.security.NoSuchAlgorithmException, javax.crypto.NoSuchPaddingException;
     method public static void generateSymmetricKey(android.content.Context, java.lang.String, java.lang.String, int) throws java.lang.IllegalArgumentException, java.lang.InterruptedException, android.security.KeyChainException, java.security.NoSuchAlgorithmException;
     method public static void importSymmetricKey(android.content.Context, java.lang.String, javax.crypto.SecretKey) throws java.lang.IllegalArgumentException, java.lang.InterruptedException, android.security.KeyChainException;
     method public static byte[] mac(android.content.Context, java.lang.String, java.lang.String, byte[]) throws android.security.CryptOracle.StringAliasNotFoundException, java.lang.IllegalArgumentException, java.lang.InterruptedException, java.security.InvalidKeyException, android.security.KeyChainException, java.security.NoSuchAlgorithmException;
-    method public static void requestKey(android.app.Activity, android.security.KeyChainAliasCallback);
     method public static javax.crypto.SecretKey retrieveSymmetricKey(android.content.Context, java.lang.String, java.lang.String) throws android.security.CryptOracle.StringAliasNotFoundException, java.lang.IllegalArgumentException, java.lang.InterruptedException, android.security.KeyChainException;
     method public static byte[] sign(android.content.Context, java.lang.String, java.lang.String, byte[]) throws android.security.CryptOracle.StringAliasNotFoundException, java.lang.InterruptedException, java.security.InvalidKeyException, java.security.spec.InvalidKeySpecException, android.security.KeyChainException, java.security.NoSuchAlgorithmException;
     method public static void storePublicCertificate(android.content.Context, java.lang.String, java.security.cert.Certificate) throws java.security.cert.CertificateEncodingException, java.lang.IllegalArgumentException, java.lang.InterruptedException, android.security.KeyChainException;
     method public static boolean verify(android.content.Context, java.lang.String, java.lang.String, byte[], byte[]) throws java.security.cert.CertificateException, android.security.CryptOracle.StringAliasNotFoundException, java.lang.InterruptedException, java.security.InvalidKeyException, android.security.KeyChainException, java.security.NoSuchAlgorithmException;
-    field public static final java.lang.String EXTRA_GENERATE = "android.security.generateAllowed";
+    field public static final java.lang.String EXTRA_ALIAS = "alias";
   }
 
   public static final class CryptOracle.StringAliasNotFoundException extends java.lang.Exception {

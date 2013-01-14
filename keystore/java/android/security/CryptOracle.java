@@ -11,6 +11,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.security.InvalidKeyException;
@@ -18,7 +19,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
-import java.security.spec.AlgorithmParameterSpec;
 import java.security.spec.InvalidKeySpecException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -35,20 +35,6 @@ import javax.crypto.spec.SecretKeySpec;
  * @author Kjell Braden <kjell.braden@stud.tu-darmstadt.de>
  */
 public final class CryptOracle {
-
-    private static class AliasResponse extends IKeyChainAliasCallback.Stub {
-        private final KeyChainAliasCallback keyChainAliasResponse;
-
-        private AliasResponse(KeyChainAliasCallback keyChainAliasResponse) {
-            this.keyChainAliasResponse = keyChainAliasResponse;
-        }
-
-        @Override
-        public void alias(String alias) {
-            this.keyChainAliasResponse.alias(alias);
-        }
-    }
-
     /*
      * The following code is taken from android.security.KeyChain, as it uses
      * the same binding mechanism
@@ -79,8 +65,7 @@ public final class CryptOracle {
         private static final long serialVersionUID = -1722952359173012650L;
     }
 
-    private static final String ACTION_CHOOSER = "com.android.keychain.CHOOSER";
-    public static final String EXTRA_GENERATE = "android.security.generateAllowed";
+    public static final String EXTRA_ALIAS = "alias";
 
     private static CryptOracleConnection bind(Context context) throws InterruptedException {
         if (context == null)
@@ -113,6 +98,14 @@ public final class CryptOracle {
         if (!isBound)
             throw new AssertionError("could not bind to KeyChainService");
         return new CryptOracleConnection(context, cryptOracleServiceConnection, q.take());
+    }
+    
+    public static Intent createCheckAccessIntent(Activity activity, String alias) {
+        Intent i = new Intent().setClassName("com.android.keychain", "com.android.keychain.manage.GrantKeyAccessActivity");
+        i.putExtra(CryptOracle.EXTRA_ALIAS, alias);
+        // the PendingIntent is used to get calling package name
+        i.putExtra(KeyChain.EXTRA_SENDER, PendingIntent.getActivity(activity, 0, new Intent(), 0));
+        return i;
     }
 
     /**
@@ -264,36 +257,6 @@ public final class CryptOracle {
             throw (StringAliasNotFoundException) s0;
         if (s0 instanceof InvalidKeySpecException)
             throw (InvalidKeySpecException) s0;
-    }
-
-    /**
-     * Shows a dialog for key selection. The user can select a private key to
-     * grant access to, or have a new private key, public key and an appropriate
-     * certificate generated and stored in the KeyStore. <br/>
-     * Ther selected alias will be supplied in the response callback. <br/>
-     * The public key can be retrieved using
-     * {@link KeyChain#getCertificateChain(Context, String)}
-     * 
-     * @param activity The {@link Activity} context to use for launching the new
-     *            sub-Activity to prompt the user to select a private key; used
-     *            only to call startActivity(); must not be null.
-     * @param response Callback to invoke when the request completes; must not
-     *            be null
-     * @see KeyChain#getCertificateChain(Context, String)
-     */
-    @SuppressWarnings("deprecation")
-    public static void requestKey(Activity activity, KeyChainAliasCallback response) {
-        if (activity == null)
-            throw new NullPointerException("activity == null");
-        if (response == null)
-            throw new NullPointerException("response == null");
-        Intent intent = new Intent(ACTION_CHOOSER);
-        intent.putExtra(KeyChain.EXTRA_RESPONSE, new AliasResponse(response));
-        // the PendingIntent is used to get calling package name
-        intent.putExtra(KeyChain.EXTRA_SENDER,
-                PendingIntent.getActivity(activity, 0, new Intent(), 0));
-        intent.putExtra(EXTRA_GENERATE, true);
-        activity.startActivity(intent);
     }
 
     /**
