@@ -11,15 +11,18 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.security.InvalidKeyException;
+import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
+import java.security.Provider;
+import java.security.PublicKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -35,6 +38,12 @@ import javax.crypto.spec.SecretKeySpec;
  * @author Kjell Braden <kjell.braden@stud.tu-darmstadt.de>
  */
 public final class CryptOracle {
+    public enum UsageType {
+        PUBLIC_ENCRYPT, PRIVATE_DECRYPT,
+        PUBLIC_VERIFY, PRIVATE_SIGN,
+        SECRET, AGREEMENT;
+    }
+
     /*
      * The following code is taken from android.security.KeyChain, as it uses
      * the same binding mechanism
@@ -66,6 +75,7 @@ public final class CryptOracle {
     }
 
     public static final String EXTRA_ALIAS = "alias";
+    public static final String EXTRA_TYPE = "type";
 
     private static CryptOracleConnection bind(Context context) throws InterruptedException {
         if (context == null)
@@ -99,10 +109,22 @@ public final class CryptOracle {
             throw new AssertionError("could not bind to KeyChainService");
         return new CryptOracleConnection(context, cryptOracleServiceConnection, q.take());
     }
-    
-    public static Intent createCheckAccessIntent(Activity activity, String alias) {
-        Intent i = new Intent().setClassName("com.android.keychain", "com.android.keychain.manage.GrantKeyAccessActivity");
+
+    /**
+     * create an intent to start a system activity that makes sure the given key
+     * can be accessed and used for the given usage type
+     * 
+     * @param activity
+     * @param alias
+     * @param type
+     * @return a startable intent, to be used with
+     *         {@link Activity#startActivity(Intent)}
+     */
+    public static Intent createCheckAccessIntent(Activity activity, String alias, UsageType type) {
+        Intent i = new Intent().setClassName("com.android.keychain",
+                "com.android.keychain.manage.GrantKeyAccessActivity");
         i.putExtra(CryptOracle.EXTRA_ALIAS, alias);
+        i.putExtra(CryptOracle.EXTRA_TYPE, type);
         // the PendingIntent is used to get calling package name
         i.putExtra(KeyChain.EXTRA_SENDER, PendingIntent.getActivity(activity, 0, new Intent(), 0));
         return i;
@@ -111,11 +133,12 @@ public final class CryptOracle {
     /**
      * @param ctx
      * @param alias identifier of the key to be used for decryption
-     * @param algorithm 
+     * @param algorithm
      * @param padding mode and padding specification, as described in
      *            {@link Cipher}
      * @param encryptedData the data to be decrypted
-     * @param params algorithm iv, or null if the mode of operation does not require an IV
+     * @param params algorithm iv, or null if the mode of operation does not
+     *            require an IV
      * @return decrypted data
      * @throws InterruptedException
      * @throws KeyChainException
@@ -128,7 +151,8 @@ public final class CryptOracle {
      * @throws InvalidKeySpecException
      */
     public static byte[] decryptData(Context ctx, String alias, String algorithm, String padding,
-            byte[] encryptedData, IvParameterSpec params) throws KeyChainException, InterruptedException,
+            byte[] encryptedData, IvParameterSpec params) throws KeyChainException,
+            InterruptedException,
             InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
             NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException,
             StringAliasNotFoundException {
@@ -153,11 +177,12 @@ public final class CryptOracle {
     /**
      * @param ctx
      * @param alias identifier of the key to be used for decryption
-     * @param algorithm 
+     * @param algorithm
      * @param padding mode and padding specification, as described in
      *            {@link Cipher}
      * @param data the data to be encrypted
-     * @param params algorithm iv, or null if the mode of operation does not require an IV
+     * @param params algorithm iv, or null if the mode of operation does not
+     *            require an IV
      * @return encrypted data
      * @throws KeyChainException
      * @throws InterruptedException
@@ -170,8 +195,9 @@ public final class CryptOracle {
      * @throws InvalidKeySpecException
      */
     public static byte[] encryptData(Context ctx, String alias, String algorithm, String padding,
-            byte[] data, IvParameterSpec params) throws KeyChainException, InterruptedException, InvalidKeySpecException,
-            CertificateException, NoSuchAlgorithmException, NoSuchPaddingException,
+            byte[] data, IvParameterSpec params) throws KeyChainException, InterruptedException,
+            InvalidKeySpecException, CertificateException, NoSuchAlgorithmException,
+            NoSuchPaddingException,
             IllegalBlockSizeException, BadPaddingException, StringAliasNotFoundException {
 
         CryptOracleConnection cryptOracleConnection = bind(ctx);
@@ -524,6 +550,99 @@ public final class CryptOracle {
             throw new KeyChainException(e);
         } finally {
             cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * generate a key pair under the application control (eg. for use with DH)
+     * 
+     * @param ctx
+     * @param alias the alias used for identifying the key
+     * @param keyAlgorithm the key algorithm
+     * @param keysize
+     * @return encoded public key
+     * @throws KeyChainException
+     * @throws NoSuchAlgorithmException
+     * @throws InvalidKeySpecException
+     * @throws InterruptedException
+     */
+    public static PublicKey generateKeyPair(Context ctx, String alias, String keyAlgorithm,
+            int keysize) throws KeyChainException, InvalidKeySpecException,
+            NoSuchAlgorithmException, InterruptedException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+            byte[] encodedKey = cryptOracleService.generateKeyPair(alias, keyAlgorithm, keysize);
+
+            return KeyFactory.getInstance(keyAlgorithm).generatePublic(
+                    new X509EncodedKeySpec(encodedKey));
+        } catch (RemoteException e) {
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * @param ctx
+     * @param alias the alias used for identifying the key
+     * @param agreementAlgorithm the agreement algorithm
+     * @param key the public key
+     * @param lastPhase whether this is the last step in the key agreement
+     *            protocol
+     * @return encoded intermediate public key
+     * @throws KeyChainException
+     * @throws NoSuchAlgorithmException
+     * @throws InvalidKeySpecException
+     * @throws InterruptedException
+     */
+    public static PublicKey keyAgreementPhase(Context ctx, String alias, String keyAlgorithm,
+            String agreementAlgorithm, PublicKey key, boolean lastPhase) throws KeyChainException,
+            InvalidKeySpecException, NoSuchAlgorithmException, InterruptedException {
+        CryptOracleConnection cryptOracleConnection = bind(ctx);
+        try {
+            ICryptOracleService cryptOracleService = cryptOracleConnection.getService();
+
+            byte[] encodedKey = cryptOracleService.keyAgreementPhase(alias, keyAlgorithm,
+                    agreementAlgorithm, key.getEncoded(), lastPhase);
+
+            if (encodedKey == null)
+                return null;
+
+            return KeyFactory.getInstance("X509", bcX509Provider)
+                    .generatePublic(new X509EncodedKeySpec(encodedKey));
+        } catch (RemoteException e) {
+            throw new KeyChainException(e);
+        } catch (RuntimeException e) {
+            throw new KeyChainException(e);
+        } finally {
+            cryptOracleConnection.close();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public static final Provider bcX509Provider = new BCX509Provider();
+
+    private static final class BCX509Provider extends Provider {
+        private static final long serialVersionUID = -4762217168644088168L;
+
+        private BCX509Provider() {
+            super("BCX509", 1, "custom BC provider providing X509 KeyFactory");
+
+            addService(
+                    "KeyFactory", "X509",
+                    com.android.org.bouncycastle.jcajce.provider.asymmetric.x509.KeyFactory.class
+                            .getCanonicalName());
+        }
+
+        private void addService(String type, String algo, String className) {
+            setProperty(type + "." + algo, className);
+            putService(new Provider.Service(this, type, algo, className, null,
+                    null));
         }
     }
 }

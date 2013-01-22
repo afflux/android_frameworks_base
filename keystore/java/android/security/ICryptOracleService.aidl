@@ -92,4 +92,16 @@ interface ICryptOracleService {
 	 * @return the digest
 	 */
    	byte[] mac(String alias, String algorithm, in byte[] data);
+   	
+   	/**
+   	 * generate a key pair under the application control (eg. for use with DH)
+   	 * @param alias the alias used for identifying the key
+   	 * @param keyAlgorithm the key algorithm
+   	 * @param keysize
+   	 * @return encoded public key  
+   	 */
+   	byte[] generateKeyPair(String alias, String keyAlgorithm, int keysize);
+
+   	
+   	byte[] keyAgreementPhase(String alias, String keyAlgorithm, String agreementAlgorithm, in byte[] encodedPublicKey, boolean lastPhase);
 }
