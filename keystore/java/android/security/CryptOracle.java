@@ -626,6 +626,7 @@ public final class CryptOracle {
      * @hide
      */
     public static final Provider bcX509Provider = new BCX509Provider();
+    public static final String EXTRA_SYMKEY = "symkey";
 
     private static final class BCX509Provider extends Provider {
         private static final long serialVersionUID = -4762217168644088168L;
